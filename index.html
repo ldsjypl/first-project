@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <title>学生记账本</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- iOS PWA 支持 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="记账本">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+  <!-- 主题色 & 图标 -->
+  <meta name="theme-color" content="#4f6ef7">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+
+  <!-- 样式 -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Chart.js（离线时从缓存加载） -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ====== 桌面侧边栏 ====== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="logo">📒 学生记账本</div>
+      <nav class="nav">
+        <button class="nav-btn active" data-page="dashboard">📊 仪表盘</button>
+        <button class="nav-btn" data-page="add">➕ 记一笔</button>
+        <button class="nav-btn" data-page="history">📋 账目明细</button>
+        <button class="nav-btn" data-page="stats">📈 统计分析</button>
+        <button class="nav-btn" data-page="budget">🎯 预算管理</button>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn-export" onclick="exportCSV()">📥 导出 CSV</button>
+        <button class="btn-clear" onclick="clearAll()">🗑 清空数据</button>
+      </div>
+    </aside>
+
+    <!-- ====== 主内容区 ====== -->
+    <main class="main-content" id="main-content">
+
+      <!-- 仪表盘 -->
+      <section id="page-dashboard" class="page active">
+        <h2>📊 本月概览</h2>
+        <div class="summary-cards">
+          <div class="card income-card">
+            <div class="card-label">本月收入</div>
+            <div class="card-value" id="monthly-income">¥0.00</div>
+          </div>
+          <div class="card expense-card">
+            <div class="card-label">本月支出</div>
+            <div class="card-value" id="monthly-expense">¥0.00</div>
+          </div>
+          <div class="card balance-card">
+            <div class="card-label">本月结余</div>
+            <div class="card-value" id="monthly-balance">¥0.00</div>
+          </div>
+          <div class="card total-card">
+            <div class="card-label">总余额</div>
+            <div class="card-value" id="total-balance">¥0.00</div>
+          </div>
+        </div>
+        <div class="budget-bar-container">
+          <div class="budget-bar-label">
+            <span>月度预算: <strong id="budget-display">¥0.00</strong></span>
+            <span>已用: <strong id="budget-used">¥0.00</strong></span>
+            <span>剩余: <strong id="budget-remain">¥0.00</strong></span>
+          </div>
+          <div class="budget-bar">
+            <div class="budget-bar-fill" id="budget-bar-fill"></div>
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-box">
+            <h3>近7天收支趋势</h3>
+            <canvas id="trendChart"></canvas>
+          </div>
+          <div class="chart-box">
+            <h3>本月支出分类</h3>
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- 记一笔 -->
+      <section id="page-add" class="page">
+        <h2>➕ 记一笔账</h2>
+        <form id="add-form" class="add-form">
+          <div class="form-group">
+            <label>类型</label>
+            <div class="type-toggle">
+              <input type="radio" name="type" value="expense" id="type-expense" checked>
+              <label for="type-expense" class="type-btn expense-btn">💰 支出</label>
+              <input type="radio" name="type" value="income" id="type-income">
+              <label for="type-income" class="type-btn income-btn">💵 收入</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="amount">金额 (元)</label>
+            <input type="number" id="amount" step="0.01" min="0.01" placeholder="0.00" inputmode="decimal" required>
+          </div>
+          <div class="form-group">
+            <label for="category">分类</label>
+            <select id="category" required>
+              <option value="">请选择分类</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="date">日期</label>
+            <input type="date" id="date" required>
+          </div>
+          <div class="form-group">
+            <label for="note">备注</label>
+            <input type="text" id="note" placeholder="可选备注...">
+          </div>
+          <button type="submit" class="btn-submit">✅ 确认记账</button>
+        </form>
+        <div id="add-msg" class="msg"></div>
+      </section>
+
+      <!-- 账目明细 -->
+      <section id="page-history" class="page">
+        <h2>📋 账目明细</h2>
+        <div class="filter-bar">
+          <select id="filter-type">
+            <option value="all">全部类型</option>
+            <option value="income">收入</option>
+            <option value="expense">支出</option>
+          </select>
+          <select id="filter-category">
+            <option value="all">全部分类</option>
+          </select>
+          <select id="filter-month">
+            <option value="all">全部月份</option>
+          </select>
+          <input type="text" id="filter-search" placeholder="🔍 搜索...">
+          <button class="btn-reset-filter" onclick="resetFilters()">重置</button>
+        </div>
+        <div class="history-summary">
+          <span>共 <strong id="filter-count">0</strong> 笔</span>
+          <span>合计: <strong id="filter-total">¥0.00</strong></span>
+        </div>
+        <div class="transaction-list" id="transaction-list">
+          <p class="empty-hint">暂无记录，快去记一笔吧～</p>
+        </div>
+      </section>
+
+      <!-- 统计分析 -->
+      <section id="page-stats" class="page">
+        <h2>📈 统计分析</h2>
+        <div class="stats-controls">
+          <select id="stats-month">
+            <option value="all">全部时间</option>
+          </select>
+        </div>
+        <div class="chart-row">
+          <div class="chart-box full-width">
+            <h3>月度收支对比</h3>
+            <canvas id="monthlyChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-box">
+            <h3>支出分类占比</h3>
+            <canvas id="statsPieChart"></canvas>
+          </div>
+          <div class="chart-box">
+            <h3>各分类支出排行</h3>
+            <canvas id="statsBarChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- 预算管理 -->
+      <section id="page-budget" class="page">
+        <h2>🎯 预算管理</h2>
+        <div class="budget-form">
+          <div class="form-group">
+            <label for="budget-month">月份</label>
+            <input type="month" id="budget-month">
+          </div>
+          <div class="form-group">
+            <label for="budget-amount">月度预算 (元)</label>
+            <input type="number" id="budget-amount" step="0.01" min="0" placeholder="0.00" inputmode="decimal">
+          </div>
+          <button class="btn-submit" onclick="setBudget()">💾 保存预算</button>
+        </div>
+        <div class="budget-list" id="budget-list">
+          <h3>已设预算</h3>
+          <p class="empty-hint">暂无预算设置</p>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- ====== 手机底部导航栏 ====== -->
+    <nav class="bottom-nav" id="bottom-nav">
+      <button class="bottom-nav-btn active" data-page="dashboard">
+        <span class="bottom-nav-icon">📊</span>
+        <span class="bottom-nav-label">概览</span>
+      </button>
+      <button class="bottom-nav-btn" data-page="add">
+        <span class="bottom-nav-icon">➕</span>
+        <span class="bottom-nav-label">记账</span>
+      </button>
+      <button class="bottom-nav-btn" data-page="history">
+        <span class="bottom-nav-icon">📋</span>
+        <span class="bottom-nav-label">明细</span>
+      </button>
+      <button class="bottom-nav-btn" data-page="stats">
+        <span class="bottom-nav-icon">📈</span>
+        <span class="bottom-nav-label">统计</span>
+      </button>
+      <button class="bottom-nav-btn" data-page="budget">
+        <span class="bottom-nav-icon">🎯</span>
+        <span class="bottom-nav-label">预算</span>
+      </button>
+    </nav>
+
+    <!-- ====== PWA 安装提示 ====== -->
+    <div class="install-banner" id="install-banner" style="display:none">
+      <div>📱 添加到主屏幕，随时随地记账</div>
+      <button class="btn-install" id="btn-install">安装</button>
+      <button class="btn-dismiss" id="btn-dismiss">✕</button>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+
+  <!-- Service Worker 注册 -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('SW 注册成功:', reg.scope))
+          .catch(err => console.log('SW 注册失败:', err));
+      });
+    }
+  </script>
+</body>
+</html>
